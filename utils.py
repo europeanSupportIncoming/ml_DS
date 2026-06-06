@@ -1,25 +1,26 @@
 import pandas as pd
 import numpy as np
 import os
-from sklearn.metrics import confusion_matrix, make_scorer
+from sklearn.metrics import confusion_matrix, make_scorer, accuracy_score, f1_score, precision_recall_fscore_support, classification_report
 from sklearn.preprocessing import LabelEncoder
-from sklearn.model_selection import cross_val_score, StratifiedKFold
+from sklearn.model_selection import cross_val_score, StratifiedKFold, train_test_split
 from sklearn.linear_model import LogisticRegression
 from sklearn.svm import SVC
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.neural_network import MLPClassifier
+from sklearn.neighbors import KNeighborsClassifier
 from sklearn.decomposition import PCA
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 import xgboost as xgb
 import itertools
 
-main_path = r'C:\Users\paulk\Desktop\ml1\ml1_assignment3'
-df = pd.read_csv(os.path.join(main_path, 'D.csv'))
-ids = df.pop('id')
-labels = df.pop('label')
+main_path = '/home/paul/Desktop/cosi_importanti/uni/DS/sem_1/ML1/ml1_assignment3'
+df = pd.read_csv(os.path.join(main_path, 'D.csv.xls'))
 X = df.copy()
+ids = X.pop('id')
+labels = X.pop('label')
 y = labels.copy()
 cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
 
@@ -33,6 +34,7 @@ X_normalized = pd.DataFrame(
     index=X.index
 )
 
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, stratify=y, random_state=42)
 
 def micro_mcc(y_true, y_pred):
     """
@@ -94,26 +96,73 @@ def micro_mcc_from_cm(cm):
 
 scorer = make_scorer(micro_mcc)
 
+
+
+# neigh = KNeighborsClassifier(n_neighbors=50)
+# neigh.fit(X_train, y_train)
+# y_pred = neigh.predict(X_test)
+#
+# print(classification_report(y_test, y_pred))
+#
+# accuracy = accuracy_score(y_test, y_pred)
+# print(f"Overall Accuracy: {accuracy:.4f}")
+#
+# macro_f1 = f1_score(y_test, y_pred, average='macro')
+# print(f"Macro-averaged F1 Score: {macro_f1:.4f}")
+#
+# precision, recall, f1, support = precision_recall_fscore_support(y_test, y_pred, average=None)
+# for i in range(len(precision)):
+#     print(f"Class {i}: Precision={precision[i]:.4f}, Recall={recall[i]:.4f}, F1={f1[i]:.4f}, Support={support[i]}")
+
+
+
+models = {
+    'Random Forest': RandomForestClassifier(class_weight='balanced', n_estimators=250, random_state=42),
+    'XGBoost': xgb.XGBClassifier(objective='multi:softmax', num_class=2, random_state=42),
+    'MLP': MLPClassifier(hidden_layer_sizes=(64, 32, 16), max_iter=800, random_state=42),
+    f'SVM with PCA': Pipeline([
+        ('pca', PCA(n_components=7)),
+        ('svm', SVC(class_weight='balanced', random_state=42))
+    ])
+}
+
+for name, model in models.items():
+    model.fit(X_train, y_train)
+    y_pred = model.predict(X_test)
+    print(name, classification_report(y_test, y_pred))
+
+    accuracy = accuracy_score(y_test, y_pred)
+    print(f"Overall Accuracy: {accuracy:.4f}")
+
+    macro_f1 = f1_score(y_test, y_pred, average='macro')
+    print(f"Macro-averaged F1 Score: {macro_f1:.4f}")
+
+    precision, recall, f1, support = precision_recall_fscore_support(y_test, y_pred, average=None)
+    for i in range(len(precision)):
+        print(f"Class {i}: Precision={precision[i]:.4f}, Recall={recall[i]:.4f}, F1={f1[i]:.4f}, Support={support[i]}")
+
+
+
 hyperparams = {
-    'n_estimators': [2, 5, 10, 25, 50, 75, 100, 150, 250, 500],
+    'n_estimators': [2, 5, 10, 25, 50, 75, 100, 250, 500, 1000],
     'num_class': [2, 3, 4, 5, 6, 8, 10, 12, 15, 20],
-    'hidden_layers': [(4,), (8,4), (16,8), (32,16), (64,32), (128,64), (256,128), (512,256), (64,32,16), (128,64,32)],
-    'components_pca': [2, 3, 4, 5, 6, 7, 8, 9, 10, 12]
+    # 'hidden_layers': [(8,), (16,8), (64,32), (256,128), (512,256), (64, 16, 64), (64,32,16), (128,64,32), (512, 256, 128), (32, 32, 32, 32)],
+    # 'components_pca': [2, 3, 4, 5, 6, 7, 8, 9, 10, 12]
 }
 
 
-for it in range(10):
-    print([hyperparams[key][it] for key in hyperparams.keys()])
-    models = {
-        'Random Forest': RandomForestClassifier(class_weight='balanced', n_estimators=hyperparams['n_estimators'][it], random_state=42),
-        'XGBoost': xgb.XGBClassifier(objective='multi:softmax', num_class=hyperparams['num_class'][it], random_state=42),
-        'MLP': MLPClassifier(hidden_layer_sizes=hyperparams['hidden_layers'][it], max_iter=1000, random_state=42),
-        f'SVM with PCA': Pipeline([
-            ('pca', PCA(n_components=hyperparams['components_pca'][it])),
-            ('svm', SVC(class_weight='balanced', random_state=42))
-        ])
-    }
-
-    for name, model in models.items():
-        scores = cross_val_score(model, X_normalized, y, cv=cv, scoring=scorer, n_jobs=-1)
-        print(f"{name:35} | MCC = {scores.mean():.4f} (+/- {scores.std():.4f})")
+# for it in range(10):
+#     print([hyperparams[key][it] for key in hyperparams.keys()])
+#     models = {
+#         'Random Forest': RandomForestClassifier(class_weight='balanced', n_estimators=hyperparams['n_estimators'][it], random_state=42),
+#         'XGBoost': xgb.XGBClassifier(objective='multi:softmax', num_class=hyperparams['num_class'][it], random_state=42),
+#         # 'MLP': MLPClassifier(hidden_layer_sizes=hyperparams['hidden_layers'][it], max_iter=1000, random_state=42),
+#         # f'SVM with PCA': Pipeline([
+#         #     ('pca', PCA(n_components=hyperparams['components_pca'][it])),
+#         #     ('svm', SVC(class_weight='balanced', random_state=42))
+#         # ])
+#     }
+#
+#     for name, model in models.items():
+#         scores = cross_val_score(model, X, y, cv=cv, scoring=scorer, n_jobs=-1)
+#         print(f"  {name:35} | MCC = {scores.mean():.4f} (+/- {scores.std():.4f})")
